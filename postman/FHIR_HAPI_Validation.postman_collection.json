@@ -1,0 +1,223 @@
+{
+  "info": {
+    "_postman_id": "185af0da-f794-40a9-8fcd-b45a3a12f678",
+    "name": "FHIR HAPI Validation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "56105776",
+    "_collection_link": "https://go.postman.co/collection/56105776-185af0da-f794-40a9-8fcd-b45a3a12f678?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "01 - Metadata (CapabilityStatement)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();\npm.test('Status is 200', () => pm.response.to.have.status(200));\npm.test('Response time < 10s', () => pm.expect(pm.response.responseTime).to.be.below(10000));\npm.test('resourceType is CapabilityStatement', () => pm.expect(json.resourceType).to.eql('CapabilityStatement'));\npm.test('FHIR version is 4.x', () => pm.expect(json.fhirVersion).to.match(/^4\\./));\npm.test('rest[0].resource list exists', () => {\n  pm.expect(json.rest[0].resource).to.be.an('array').that.is.not.empty;\n});\nconst types = json.rest[0].resource.map(r => r.type);\nconsole.log('Total resource types: ' + types.length);\nconsole.log(types.join(', '));\nconst required = ['Patient','Practitioner','Organization','Encounter','Condition','Observation'];\npm.test('Starter resources are supported', () => {\n  required.forEach(t => pm.expect(types, t).to.include(t));\n});\npm.test('Patient supports _lastUpdated search param', () => {\n  const p = json.rest[0].resource.find(r => r.type === 'Patient');\n  const names = (p.searchParam || []).map(s => s.name);\n  pm.expect(names).to.include('_lastUpdated');\n});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/fhir+json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/metadata",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "metadata"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02 - Patient sample (_count=10)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();\npm.test('Status is 200', () => pm.response.to.have.status(200));\npm.test('resourceType is Bundle', () => pm.expect(json.resourceType).to.eql('Bundle'));\npm.test('Bundle type is searchset', () => pm.expect(json.type).to.eql('searchset'));\npm.test('entry array is present', () => pm.expect(json.entry).to.be.an('array').that.is.not.empty);\npm.test('Entries respect _count', () => pm.expect(json.entry.length).to.be.at.most(parseInt(pm.environment.get('pageSize'))));\npm.test('Every entry has resource.id', () => json.entry.forEach(e => pm.expect(e.resource.id).to.exist));\npm.test('Every entry has meta.lastUpdated', () => json.entry.forEach(e => pm.expect(e.resource.meta.lastUpdated).to.exist));\npm.test('resourceType matches request', () => json.entry.forEach(e => pm.expect(e.resource.resourceType).to.eql(pm.variables.get('resource'))));\npm.test('ids are unique in page', () => {\n  const ids = json.entry.map(e => e.resource.id);\n  pm.expect(new Set(ids).size).to.eql(ids.length);\n});\nconst next = (json.link || []).find(l => l.relation === 'next');\npm.environment.set('nextUrl', next ? next.url : '');\nconsole.log('next link: ' + (next ? next.url : 'none'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/fhir+json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/{{resource}}?_count={{pageSize}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{resource}}"
+          ],
+          "query": [
+            {
+              "key": "_count",
+              "value": "{{pageSize}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03 - Patient total count (_summary=count)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Bundle has numeric total', () => pm.expect(json.total).to.be.a('number'));",
+              "pm.environment.set('apiCount', json.total);",
+              "console.log(pm.environment.get('resource') + ' total = ' + json.total);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/fhir+json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/{{resource}}?_summary=count",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{resource}}"
+          ],
+          "query": [
+            {
+              "key": "_summary",
+              "value": "count"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "04 - Incremental (_lastUpdated + _sort)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();\npm.test('Status is 200', () => pm.response.to.have.status(200));\npm.test('resourceType is Bundle', () => pm.expect(json.resourceType).to.eql('Bundle'));\nconst entries = json.entry || [];\nconsole.log('Rows returned: ' + entries.length);\nif (entries.length > 0) {\n  const wm = new Date(pm.variables.get('watermark')).getTime();\n  const dates = entries.map(e => new Date(e.resource.meta.lastUpdated).getTime());\n  pm.test('All records are newer than watermark', () => dates.forEach(d => pm.expect(d).to.be.above(wm)));\n  pm.test('Sorted ascending by lastUpdated', () => {\n    for (let i = 1; i < dates.length; i++) pm.expect(dates[i]).to.be.at.least(dates[i-1]);\n  });\n  const maxLu = entries[entries.length - 1].resource.meta.lastUpdated;\n  pm.environment.set('newWatermark', maxLu);\n  console.log('Candidate new watermark: ' + maxLu);\n} else {\n  pm.test('Empty result is valid (no new data)', () => pm.expect(entries.length).to.eql(0));\n}\nconst next = (json.link || []).find(l => l.relation === 'next');\npm.environment.set('nextUrl', next ? next.url : '');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/fhir+json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/{{resource}}?_lastUpdated=gt{{watermark}}&_sort=_lastUpdated&_count=50",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{resource}}"
+          ],
+          "query": [
+            {
+              "key": "_lastUpdated",
+              "value": "gt{{watermark}}"
+            },
+            {
+              "key": "_sort",
+              "value": "_lastUpdated"
+            },
+            {
+              "key": "_count",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "05 - Follow next link (paging)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.environment.get('nextUrl')) {",
+              "  throw new Error('nextUrl is empty. Run request 02 or 04 first.');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Page 2 is a Bundle with entries', () => {",
+              "  pm.expect(json.resourceType).to.eql('Bundle');",
+              "  pm.expect(json.entry).to.be.an('array').that.is.not.empty;",
+              "});",
+              "pm.test('Has self link', () => pm.expect((json.link||[]).some(l => l.relation==='self')).to.be.true);",
+              "const next = (json.link || []).find(l => l.relation === 'next');",
+              "pm.environment.set('nextUrl', next ? next.url : '');",
+              "console.log('Next page: ' + (next ? next.url : 'END OF DATA'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/fhir+json"
+          }
+        ],
+        "url": {
+          "raw": "{{nextUrl}}",
+          "host": [
+            "{{nextUrl}}"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

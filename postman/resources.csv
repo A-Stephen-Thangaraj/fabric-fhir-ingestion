@@ -1,0 +1,7 @@
+resource,watermark
+Patient,2026-01-01T00:00:00Z
+Practitioner,2026-01-01T00:00:00Z
+Organization,2026-01-01T00:00:00Z
+Encounter,2026-01-01T00:00:00Z
+Condition,2026-01-01T00:00:00Z
+Observation,2026-01-01T00:00:00Z
